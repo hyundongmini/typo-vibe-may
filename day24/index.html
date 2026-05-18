@@ -944,6 +944,8 @@ function restartGame() {
   // 카메라 리셋 - 초기 위치
   camera.position.set(0, 4.5, 12);
   camera.lookAt(0, 0.5, 0);
+  currentCamY = 4.5;
+  currentLookY = 0.5;
   isShaking = false; // 흔들림 상태 리셋
   
   // 조명 리셋
@@ -1021,6 +1023,10 @@ window.addEventListener('keydown', (e) => {
 const clock = new THREE.Clock();
 let time = 0;
 
+// 카메라 부드러운 이동을 위한 변수
+let currentCamY = 4.5;
+let currentLookY = 0.5;
+
 function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
@@ -1044,32 +1050,27 @@ function animate() {
     }
   }
   
-  // 카메라 - 쌓인 케이크 기준 (떨어지는 케이크 추적 안함)
-  if (gameStarted && !gameOver) {
+  // 카메라 - 매우 부드러운 이동
+  if (gameStarted && !gameOver && !isShaking) {
     // 쌓인 케이크의 최상단 높이 기준
     const stackTopY = 0.25 + stackedLayers.length * layerHeight;
     
-    // 새 케이크가 위에서 시작하는 높이 (stackTopY + 2.5 + layerHeight/2)
-    // 이 높이까지 보이도록 카메라 위치 설정
-    const swingCakeY = stackTopY + 3; // 움직이는 케이크 예상 높이
+    // 목표 카메라 위치
+    const targetCamY = stackTopY + 5.5;
+    const targetLookY = stackTopY + 0.5;
     
-    // 카메라는 움직이는 케이크가 화면에 들어오도록 충분히 높이 위치
-    const targetCamY = swingCakeY + 2.5;
-    const targetLookY = stackTopY;
+    // 매우 부드러운 보간 (lerp factor 낮춤)
+    currentCamY += (targetCamY - currentCamY) * 0.015;
+    currentLookY += (targetLookY - currentLookY) * 0.015;
     
-    // 부드러운 카메라 이동 (lerp) - 느리게
-    camera.position.y += (targetCamY - camera.position.y) * 0.03;
-    camera.lookAt(0, targetLookY, 0);
+    camera.position.y = currentCamY;
+    camera.lookAt(0, currentLookY, 0);
     
-    // 스포트라이트도 따라 올라감
-    spotLight.position.y += (stackTopY + 12 - spotLight.position.y) * 0.03;
-    spotLight.target.position.y = stackTopY;
-    
-    // 보조 스포트라이트
-    spotLight2.position.y += (stackTopY + 10 - spotLight2.position.y) * 0.03;
-    
-    // 림 라이트
-    rimLight.position.y += (stackTopY + 3 - rimLight.position.y) * 0.03;
+    // 조명도 부드럽게
+    spotLight.position.y += (stackTopY + 12 - spotLight.position.y) * 0.015;
+    spotLight.target.position.y += (stackTopY - spotLight.target.position.y) * 0.015;
+    spotLight2.position.y += (stackTopY + 10 - spotLight2.position.y) * 0.015;
+    rimLight.position.y += (stackTopY + 3 - rimLight.position.y) * 0.015;
   }
   
   // ===== 파티 요소 애니메이션 =====
