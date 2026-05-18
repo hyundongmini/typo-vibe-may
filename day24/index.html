@@ -931,29 +931,30 @@ function animate() {
     }
   }
   
-  // 카메라 - 움직이는 케이크가 항상 보이도록
+  // 카메라 - 쌓인 케이크 기준 (떨어지는 케이크 추적 안함)
   if (gameStarted && !gameOver) {
-    // 현재 움직이는 케이크의 높이 또는 쌓인 케이크 최상단 기준
-    let topY = 0.25 + stackedLayers.length * layerHeight;
-    if (currentLayer) {
-      topY = Math.max(topY, currentLayer.position.y);
-    }
+    // 쌓인 케이크의 최상단 높이 기준
+    const stackTopY = 0.25 + stackedLayers.length * layerHeight;
     
-    // 카메라는 최상단 케이크보다 위에서 바라봄
-    const targetCamY = topY + 3;
-    const targetLookY = topY - 1;
+    // 새 케이크가 위에서 시작하는 높이 (stackTopY + 2.5 + layerHeight/2)
+    // 이 높이까지 보이도록 카메라 위치 설정
+    const swingCakeY = stackTopY + 3; // 움직이는 케이크 예상 높이
     
-    // 부드러운 카메라 이동 (lerp)
-    camera.position.y += (targetCamY - camera.position.y) * 0.08;
+    // 카메라는 움직이는 케이크가 화면에 들어오도록 충분히 높이 위치
+    const targetCamY = swingCakeY + 2.5;
+    const targetLookY = stackTopY;
+    
+    // 부드러운 카메라 이동 (lerp) - 느리게
+    camera.position.y += (targetCamY - camera.position.y) * 0.03;
     camera.lookAt(0, targetLookY, 0);
     
     // 스포트라이트도 따라 올라감
-    spotLight.position.y += (topY + 10 - spotLight.position.y) * 0.05;
-    spotLight.target.position.y = topY;
+    spotLight.position.y += (stackTopY + 12 - spotLight.position.y) * 0.03;
+    spotLight.target.position.y = stackTopY;
     
     // 따뜻한 조명도 따라 올라감
-    warmLight.position.y += (topY + 2 - warmLight.position.y) * 0.05;
-    warmLight2.position.y += (topY + 1 - warmLight2.position.y) * 0.05;
+    warmLight.position.y += (stackTopY + 2 - warmLight.position.y) * 0.03;
+    warmLight2.position.y += (stackTopY + 1 - warmLight2.position.y) * 0.03;
   }
   
   renderer.render(scene, camera);
