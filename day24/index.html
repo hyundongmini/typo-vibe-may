@@ -144,35 +144,40 @@ const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 10
 camera.position.set(0, 4.5, 12);
 camera.lookAt(0, 0.5, 0);
 
-// ===== 조명 (생일 파티 분위기) =====
-const ambientLight = new THREE.AmbientLight(0x222244, 0.3);
+// ===== 조명 (생일 파티 분위기 - 위에서 하이라이트) =====
+const ambientLight = new THREE.AmbientLight(0x111122, 0.2);
 scene.add(ambientLight);
 
-// 메인 스포트라이트 (케이크 위에서 아래로)
-const spotLight = new THREE.SpotLight(0xfff5e0, 3);
+// 메인 스포트라이트 (케이크 위에서 아래로 - 강한 하이라이트)
+const spotLight = new THREE.SpotLight(0xffffff, 5);
 spotLight.position.set(0, 15, 0);
-spotLight.angle = Math.PI / 6;
-spotLight.penumbra = 0.5;
-spotLight.decay = 1;
-spotLight.distance = 40;
+spotLight.angle = Math.PI / 5;
+spotLight.penumbra = 0.3;
+spotLight.decay = 1.5;
+spotLight.distance = 50;
 spotLight.castShadow = true;
 spotLight.shadow.mapSize.width = 1024;
 spotLight.shadow.mapSize.height = 1024;
 scene.add(spotLight);
 scene.add(spotLight.target);
 
-// 따뜻한 포인트 라이트 (케이크 주변)
-const warmLight = new THREE.PointLight(0xffaa55, 1.5, 15);
-warmLight.position.set(2, 3, 2);
-scene.add(warmLight);
+// 보조 스포트라이트 (약간 앞에서)
+const spotLight2 = new THREE.SpotLight(0xfff8e0, 2);
+spotLight2.position.set(0, 12, 5);
+spotLight2.angle = Math.PI / 6;
+spotLight2.penumbra = 0.5;
+spotLight2.decay = 1.5;
+spotLight2.distance = 40;
+scene.add(spotLight2);
 
-const warmLight2 = new THREE.PointLight(0xff8866, 1, 12);
-warmLight2.position.set(-2, 2, -1);
-scene.add(warmLight2);
+// 따뜻한 림 라이트 (뒤에서 - 윤곽 강조)
+const rimLight = new THREE.PointLight(0xffaa44, 1.5, 20);
+rimLight.position.set(0, 5, -5);
+scene.add(rimLight);
 
 // 고양이 쪽 조명
-const catLight = new THREE.PointLight(0xffeedd, 1.2, 10);
-catLight.position.set(4, 2, 2);
+const catLight = new THREE.PointLight(0xffeedd, 1.5, 12);
+catLight.position.set(4, 3, 2);
 scene.add(catLight);
 
 // ===== 바닥 (케이크 받침대) =====
@@ -833,10 +838,10 @@ function restartGame() {
   isShaking = false; // 흔들림 상태 리셋
   
   // 조명 리셋
-  spotLight.position.y = 12;
+  spotLight.position.y = 15;
   spotLight.target.position.y = 0;
-  warmLight.position.y = 2;
-  warmLight2.position.y = 1;
+  spotLight2.position.y = 12;
+  rimLight.position.y = 5;
   
   // 고양이 리액션 리셋
   if (catModel) {
@@ -952,9 +957,11 @@ function animate() {
     spotLight.position.y += (stackTopY + 12 - spotLight.position.y) * 0.03;
     spotLight.target.position.y = stackTopY;
     
-    // 따뜻한 조명도 따라 올라감
-    warmLight.position.y += (stackTopY + 2 - warmLight.position.y) * 0.03;
-    warmLight2.position.y += (stackTopY + 1 - warmLight2.position.y) * 0.03;
+    // 보조 스포트라이트
+    spotLight2.position.y += (stackTopY + 10 - spotLight2.position.y) * 0.03;
+    
+    // 림 라이트
+    rimLight.position.y += (stackTopY + 3 - rimLight.position.y) * 0.03;
   }
   
   renderer.render(scene, camera);
