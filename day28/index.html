@@ -25,7 +25,7 @@
       height: 100%;
     }
 
-    /* Background image layer - video 위에 겹침 */
+    /* Background image layer - canvas 뒤에 */
     .bg-layer {
       position: fixed;
       top: -100%;
@@ -36,10 +36,9 @@
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
-      z-index: 2;
+      z-index: 1;
       pointer-events: none;
       animation: bgSlideDown 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      mix-blend-mode: lighten;
     }
 
     @keyframes bgSlideDown {
@@ -57,26 +56,24 @@
       display: none;
     }
 
-    /* Video background layer */
+    /* Video - 숨김 */
     #video {
       position: absolute;
       width: 100%;
       height: 100%;
       object-fit: cover;
       transform: scaleX(-1);
-      filter: contrast(1.1) brightness(0.95);
-      z-index: 3;
+      display: none;
     }
 
-    /* Canvas overlay */
+    /* Canvas - 세그멘테이션 마스킹 */
     #canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 4;
-      display: none;
+      z-index: 3;
     }
 
     /* Speech bubble */
@@ -171,7 +168,7 @@
         opacity: 0;
       }
       100% {
-        transform: translateY(0) scale(1);
+        transform: translateY(-100px) scale(1);
         opacity: 1;
       }
     }
@@ -258,6 +255,8 @@
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <!-- MediaPipe Selfie Segmentation -->
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
   <script>
     class PressConferenceFilter {
@@ -271,6 +270,7 @@
         this.statusEl = document.getElementById('status');
 
         this.pose = null;
+        this.segmentation = null;
         this.camera = null;
         this.isActive = false;
         this.handRaisedTime = 0;
@@ -279,7 +279,7 @@
         this.triggerCooldown = 2000;
 
         this.setupCanvas();
-        this.initPose();
+        this.initModels();
       }
 
       setupCanvas() {
@@ -292,23 +292,31 @@
         });
       }
 
-      async initPose() {
+      async initModels() {
         try {
+          // Pose
           this.pose = new Pose({
-            locateFile: (file) => {
-              return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-            }
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
           });
-
           this.pose.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
           });
-
           this.pose.onResults(this.onPoseResults.bind(this));
 
+          // Segmentation
+          this.segmentation = new SelfieSegmentation({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+          });
+          this.segmentation.setOptions({
+            modelSelection: 1,
+            selfieMode: true
+          });
+          this.segmentation.onResults(this.onSegmentationResults.bind(this));
+
+          // Camera
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 1280 }, height: { ideal: 720 } }
           });
@@ -318,6 +326,7 @@
             this.camera = new Camera(this.video, {
               onFrame: async () => {
                 await this.pose.send({ image: this.video });
+                await this.segmentation.send({ image: this.video });
               },
               width: 1280,
               height: 720
@@ -330,6 +339,30 @@
           console.error('초기화 실패:', error);
           this.statusEl.textContent = '초기화 실패';
         }
+      }
+
+      onSegmentationResults(results) {
+        if (!results.segmentationMask) return;
+
+        // Canvas에 video 그리기
+        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+
+        // 세그멘테이션 마스크 적용
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+        const data = imageData.data;
+        const maskData = new Uint8ClampedArray(results.segmentationMask.data);
+
+        for (let i = 0; i < maskData.length; i++) {
+          const maskValue = maskData[i];
+          const pixelIndex = i * 4;
+
+          // 사람이 아닌 부분 투명화
+          if (maskValue < 128) {
+            data[pixelIndex + 3] = 0;
+          }
+        }
+
+        this.ctx.putImageData(imageData, 0, 0);
       }
 
       onPoseResults(results) {
@@ -367,28 +400,24 @@
       trigger() {
         this.isActive = true;
 
-        // Show BG
+        // BG 표시
         this.bgLayer.classList.remove('hidden');
-        console.log('✅ BG 표시됨');
-        console.log('BG 요소:', this.bgLayer);
-        console.log('BG 배경이미지:', window.getComputedStyle(this.bgLayer).backgroundImage);
-        
         this.bgLayer.style.animation = 'none';
         setTimeout(() => {
           this.bgLayer.style.animation = 'bgSlideDown 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards';
         }, 10);
 
-        // Show speech bubble
+        // 말풍선
         this.speechBubble.style.display = 'block';
         this.speechBubble.style.animation = 'none';
         setTimeout(() => {
           this.speechBubble.style.animation = 'bubblePop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards';
         }, 10);
 
-        // Create microphone
+        // 마이크
         this.createMicrophone();
 
-        // Reset after 2 seconds
+        // 리셋
         setTimeout(() => {
           this.reset();
         }, 2000);
