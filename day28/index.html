@@ -23,30 +23,59 @@
       position: relative;
       width: 100%;
       height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
-    /* Video background layer - 숨김 (canvas가 대신함) */
+    /* Background image layer - 맨 뒤 */
+    .bg-layer {
+      position: fixed;
+      top: -100%;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('./BG.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      z-index: 1;
+      pointer-events: none;
+      animation: bgSlideDown 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes bgSlideDown {
+      0% {
+        top: -100%;
+        opacity: 0;
+      }
+      100% {
+        top: 0;
+        opacity: 1;
+      }
+    }
+
+    .bg-layer.hidden {
+      display: none;
+    }
+
+    /* Video background layer */
     #video {
       position: absolute;
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* Mirror effect */
-      display: none; /* Canvas가 대신 렌더링 */
+      transform: scaleX(-1);
+      filter: contrast(1.1) brightness(0.95);
+      z-index: 3;
     }
 
-    /* Canvas overlay for effects */
+    /* Canvas overlay */
     #canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 3;
-      transform: scaleX(-1); /* Mirror effect */
+      z-index: 4;
+      display: none;
     }
 
     /* Speech bubble */
@@ -106,7 +135,7 @@
       border-top: 18px solid #000;
     }
 
-    /* Microphone container - 이미지 끝이 화면 끝에 맞닿도록 */
+    /* Microphone container */
     .microphone-container {
       position: fixed;
       bottom: 0;
@@ -146,13 +175,12 @@
       }
     }
 
-    /* Floating animation */
     @keyframes float {
       0%, 100% {
-        transform: translateY(0px) rotateZ(0deg);
+        transform: translateY(0px);
       }
       50% {
-        transform: translateY(-8px) rotateZ(1deg);
+        transform: translateY(-8px);
       }
     }
 
@@ -160,38 +188,20 @@
       animation: micRise 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, float 2s ease-in-out 0.5s infinite;
     }
 
-    /* Background image layer - 사람 뒤에 보이도록 */
-    .bg-layer {
-      position: fixed;
-      top: -100%;
+    /* Grain effect */
+    #grain {
+      position: absolute;
+      top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background-image: url('./BG.png');
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      z-index: 2;
       pointer-events: none;
-      animation: bgSlideDown 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      opacity: 0.03;
+      background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/></filter><rect width="100" height="100" fill="black" filter="url(%23noise)"/></svg>');
+      z-index: 20;
     }
 
-    @keyframes bgSlideDown {
-      0% {
-        top: -100%;
-        opacity: 0;
-      }
-      100% {
-        top: 0;
-        opacity: 1;
-      }
-    }
-
-    .bg-layer.hidden {
-      display: none;
-    }
-
-    /* UI Info */
+    /* Info panel */
     .info {
       position: fixed;
       top: 20px;
@@ -218,16 +228,16 @@
 </head>
 <body>
   <div class="container">
+    <!-- Background image layer -->
+    <div class="bg-layer hidden" id="bgLayer"></div>
+
     <!-- Video background -->
     <video id="video" autoplay playsinline></video>
 
-    <!-- Background image layer (slides down when hand raised) -->
-    <div class="bg-layer hidden" id="bgLayer"></div>
-
-    <!-- Canvas for pose visualization (optional) -->
+    <!-- Canvas -->
     <canvas id="canvas"></canvas>
 
-    <!-- Speech bubble (hidden by default) -->
+    <!-- Speech bubble -->
     <div class="speech-bubble" id="speechBubble" style="display: none;">질문있습니다!</div>
 
     <!-- Microphone container -->
@@ -247,13 +257,8 @@
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-  <!-- MediaPipe Selfie Segmentation -->
-  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
   <script>
-    // ============================================
-    // SELFIE SEGMENTATION & HAND RAISE LOGIC
-    // ============================================
     class PressConferenceFilter {
       constructor() {
         this.video = document.getElementById('video');
@@ -265,17 +270,15 @@
         this.statusEl = document.getElementById('status');
 
         this.pose = null;
-        this.segmentation = null;
         this.camera = null;
         this.isActive = false;
         this.handRaisedTime = 0;
-        this.triggerThreshold = 200; // 0.2 seconds
-        this.microphones = [];
+        this.triggerThreshold = 200;
         this.lastTriggerTime = 0;
-        this.triggerCooldown = 2000; // 2 seconds
+        this.triggerCooldown = 2000;
 
         this.setupCanvas();
-        this.initModels();
+        this.initPose();
       }
 
       setupCanvas() {
@@ -288,9 +291,8 @@
         });
       }
 
-      async initModels() {
+      async initPose() {
         try {
-          // Initialize Pose
           this.pose = new Pose({
             locateFile: (file) => {
               return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
@@ -300,25 +302,12 @@
           this.pose.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
-            enableSegmentation: false,
-            smoothSegmentation: false,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
           });
 
-          // Initialize Selfie Segmentation
-          this.segmentation = new SelfieSegmentation({
-            locateFile: (file) => {
-              return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
-            }
-          });
+          this.pose.onResults(this.onPoseResults.bind(this));
 
-          this.segmentation.setOptions({
-            modelSelection: 1, // 1 = landscape model (더 빠름)
-            selfieMode: true
-          });
-
-          // Setup camera
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { width: { ideal: 1280 }, height: { ideal: 720 } }
           });
@@ -327,9 +316,7 @@
           this.video.onloadedmetadata = () => {
             this.camera = new Camera(this.video, {
               onFrame: async () => {
-                // Run both models
                 await this.pose.send({ image: this.video });
-                await this.segmentation.send({ image: this.video });
               },
               width: 1280,
               height: 720
@@ -338,63 +325,25 @@
             this.statusEl.textContent = '준비 완료!';
             this.statusEl.classList.add('active');
           };
-
-          // Callbacks
-          this.pose.onResults(this.onPoseResults.bind(this));
-          this.segmentation.onResults(this.onSegmentationResults.bind(this));
         } catch (error) {
-          console.error('모델 초기화 실패:', error);
+          console.error('초기화 실패:', error);
           this.statusEl.textContent = '초기화 실패';
         }
-      }
-
-      onSegmentationResults(results) {
-        if (!results.segmentationMask) return;
-
-        // Clear canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw video frame to canvas
-        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
-
-        // Get segmentation mask
-        const mask = results.segmentationMask;
-        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-        const data = imageData.data;
-
-        // Apply mask to alpha channel
-        const maskData = new Uint8ClampedArray(mask.data);
-        
-        for (let i = 0; i < maskData.length; i++) {
-          const maskValue = maskData[i];
-          const pixelIndex = i * 4;
-
-          // If not person (maskValue < 128), make transparent
-          if (maskValue < 128) {
-            data[pixelIndex + 3] = 0; // Set alpha to 0
-          }
-        }
-
-        this.ctx.putImageData(imageData, 0, 0);
       }
 
       onPoseResults(results) {
         if (!results.poseLandmarks) return;
 
         const landmarks = results.poseLandmarks;
-
-        // Get key points
         const rightWrist = landmarks[16];
         const rightShoulder = landmarks[12];
         const leftWrist = landmarks[15];
         const leftShoulder = landmarks[11];
 
-        // Check if hand is raised
         const rightHandRaised = rightWrist.y < rightShoulder.y - 0.1 && rightWrist.visibility > 0.5;
         const leftHandRaised = leftWrist.y < leftShoulder.y - 0.1 && leftWrist.visibility > 0.5;
         const handRaised = rightHandRaised || leftHandRaised;
 
-        // Track hand raise duration
         if (handRaised) {
           if (this.handRaisedTime === 0) {
             this.handRaisedTime = Date.now();
@@ -402,11 +351,9 @@
 
           const raisedDuration = Date.now() - this.handRaisedTime;
 
-          // Trigger if hand raised for threshold time
           if (raisedDuration > this.triggerThreshold && !this.isActive) {
             const now = Date.now();
             if (now - this.lastTriggerTime > this.triggerCooldown) {
-              console.log('✅ TRIGGER!');
               this.trigger();
               this.lastTriggerTime = now;
             }
@@ -419,7 +366,7 @@
       trigger() {
         this.isActive = true;
 
-        // Show background image
+        // Show BG
         this.bgLayer.classList.remove('hidden');
         this.bgLayer.style.animation = 'none';
         setTimeout(() => {
@@ -433,8 +380,8 @@
           this.speechBubble.style.animation = 'bubblePop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards';
         }, 10);
 
-        // Create microphones
-        this.createMicrophones();
+        // Create microphone
+        this.createMicrophone();
 
         // Reset after 2 seconds
         setTimeout(() => {
@@ -442,27 +389,18 @@
         }, 2000);
       }
 
-      createMicrophones() {
+      createMicrophone() {
         this.micContainer.innerHTML = '';
-        this.microphones = [];
 
-        // Create single microphone at center bottom
         const mic = document.createElement('div');
         mic.className = 'microphone floating';
 
         const img = document.createElement('img');
         img.src = './micmic.png';
         img.alt = 'microphone';
-        img.onerror = () => {
-          console.error('❌ 마이크 이미지 로드 실패:', './micmic.png');
-        };
-        img.onload = () => {
-          console.log('✅ 마이크 이미지 로드 성공');
-        };
 
         mic.appendChild(img);
         this.micContainer.appendChild(mic);
-        this.microphones.push(mic);
       }
 
       reset() {
@@ -470,11 +408,9 @@
         this.speechBubble.style.display = 'none';
         this.bgLayer.classList.add('hidden');
         this.micContainer.innerHTML = '';
-        this.microphones = [];
       }
     }
 
-    // Initialize on page load
     window.addEventListener('load', () => {
       new PressConferenceFilter();
     });
