@@ -37,7 +37,6 @@
       transform: scaleX(-1); /* Mirror effect */
       filter: contrast(1.1) brightness(0.95);
       z-index: 3;
-      mix-blend-mode: screen; /* 사람 형상만 보이도록 */
     }
 
     /* Canvas overlay for effects */
@@ -47,7 +46,8 @@
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 4;
+      z-index: 3;
+      mix-blend-mode: multiply; /* 세그멘테이션 마스크 적용 */
     }
 
     /* Speech bubble */
@@ -107,16 +107,17 @@
       border-top: 18px solid #000;
     }
 
-    /* Microphone container */
+    /* Microphone container - 이미지 끝이 화면 끝에 맞닿도록 */
     .microphone-container {
       position: fixed;
-      bottom: -200px;
+      bottom: 0;
       left: 50%;
       transform: translateX(-50%);
       width: 600px;
       height: 800px;
       pointer-events: none;
       z-index: 5;
+      overflow: hidden;
     }
 
     .microphone {
@@ -247,10 +248,12 @@
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <!-- MediaPipe Selfie Segmentation -->
+  <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 
   <script>
     // ============================================
-    // POSE DETECTION & HAND RAISE LOGIC
+    // SELFIE SEGMENTATION & HAND RAISE LOGIC
     // ============================================
     class PressConferenceFilter {
       constructor() {
@@ -263,16 +266,17 @@
         this.statusEl = document.getElementById('status');
 
         this.pose = null;
+        this.segmentation = null;
         this.camera = null;
         this.isActive = false;
         this.handRaisedTime = 0;
-        this.triggerThreshold = 200; // 0.2 seconds (더 빠르게)
+        this.triggerThreshold = 200; // 0.2 seconds
         this.microphones = [];
         this.lastTriggerTime = 0;
         this.triggerCooldown = 2000; // 2 seconds
 
         this.setupCanvas();
-        this.initPose();
+        this.initModels();
       }
 
       setupCanvas() {
@@ -285,8 +289,9 @@
         });
       }
 
-      async initPose() {
+      async initModels() {
         try {
+          // Initialize Pose
           this.pose = new Pose({
             locateFile: (file) => {
               return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
@@ -302,7 +307,17 @@
             minTrackingConfidence: 0.5
           });
 
-          this.pose.onResults(this.onPoseResults.bind(this));
+          // Initialize Selfie Segmentation
+          this.segmentation = new SelfieSegmentation({
+            locateFile: (file) => {
+              return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+            }
+          });
+
+          this.segmentation.setOptions({
+            modelSelection: 1, // 1 = landscape model (더 빠름)
+            selfieMode: true
+          });
 
           // Setup camera
           const stream = await navigator.mediaDevices.getUserMedia({
@@ -313,7 +328,9 @@
           this.video.onloadedmetadata = () => {
             this.camera = new Camera(this.video, {
               onFrame: async () => {
+                // Run both models
                 await this.pose.send({ image: this.video });
+                await this.segmentation.send({ image: this.video });
               },
               width: 1280,
               height: 720
@@ -322,10 +339,43 @@
             this.statusEl.textContent = '준비 완료!';
             this.statusEl.classList.add('active');
           };
+
+          // Callbacks
+          this.pose.onResults(this.onPoseResults.bind(this));
+          this.segmentation.onResults(this.onSegmentationResults.bind(this));
         } catch (error) {
-          console.error('카메라 초기화 실패:', error);
-          this.statusEl.textContent = '카메라 접근 실패';
+          console.error('모델 초기화 실패:', error);
+          this.statusEl.textContent = '초기화 실패';
         }
+      }
+
+      onSegmentationResults(results) {
+        if (!results.segmentationMask) return;
+
+        // Draw segmentation mask to canvas
+        const mask = results.segmentationMask;
+        const imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+        const data = imageData.data;
+
+        // Get mask data
+        const maskData = new Uint8ClampedArray(mask.data);
+
+        // Create alpha channel based on mask
+        for (let i = 0; i < maskData.length; i++) {
+          const maskValue = maskData[i];
+          const pixelIndex = i * 4;
+
+          if (maskValue > 0.5) {
+            // Person detected - keep alpha opaque
+            data[pixelIndex + 3] = 255;
+          } else {
+            // Background - make transparent
+            data[pixelIndex + 3] = 0;
+          }
+        }
+
+        // Apply to canvas as mask
+        this.ctx.putImageData(imageData, 0, 0);
       }
 
       onPoseResults(results) {
@@ -334,22 +384,15 @@
         const landmarks = results.poseLandmarks;
 
         // Get key points
-        const rightWrist = landmarks[16]; // Right wrist
-        const rightShoulder = landmarks[12]; // Right shoulder
-        const leftWrist = landmarks[15]; // Left wrist
-        const leftShoulder = landmarks[11]; // Left shoulder
+        const rightWrist = landmarks[16];
+        const rightShoulder = landmarks[12];
+        const leftWrist = landmarks[15];
+        const leftShoulder = landmarks[11];
 
-        // Debug: Log positions
-        console.log('Right Wrist Y:', rightWrist.y, 'Right Shoulder Y:', rightShoulder.y);
-        console.log('Left Wrist Y:', leftWrist.y, 'Left Shoulder Y:', leftShoulder.y);
-
-        // Check if hand is raised (wrist above shoulder)
-        // Note: Y coordinates are normalized (0-1), smaller Y = higher on screen
+        // Check if hand is raised
         const rightHandRaised = rightWrist.y < rightShoulder.y - 0.1 && rightWrist.visibility > 0.5;
         const leftHandRaised = leftWrist.y < leftShoulder.y - 0.1 && leftWrist.visibility > 0.5;
         const handRaised = rightHandRaised || leftHandRaised;
-
-        console.log('Hand Raised:', handRaised, 'Right:', rightHandRaised, 'Left:', leftHandRaised);
 
         // Track hand raise duration
         if (handRaised) {
@@ -358,13 +401,12 @@
           }
 
           const raisedDuration = Date.now() - this.handRaisedTime;
-          console.log('Raised Duration:', raisedDuration);
 
           // Trigger if hand raised for threshold time
           if (raisedDuration > this.triggerThreshold && !this.isActive) {
             const now = Date.now();
             if (now - this.lastTriggerTime > this.triggerCooldown) {
-              console.log('TRIGGER!');
+              console.log('✅ TRIGGER!');
               this.trigger();
               this.lastTriggerTime = now;
             }
@@ -372,9 +414,6 @@
         } else {
           this.handRaisedTime = 0;
         }
-
-        // Draw pose for debugging
-        this.drawPose(landmarks);
       }
 
       trigger() {
@@ -410,34 +449,20 @@
         // Create single microphone at center bottom
         const mic = document.createElement('div');
         mic.className = 'microphone floating';
-        mic.style.border = '2px solid red'; // 디버그: 빨간 테두리로 위치 확인
-        mic.style.backgroundColor = 'rgba(255, 0, 0, 0.1)'; // 디버그: 반투명 배경
 
         const img = document.createElement('img');
         img.src = './micmic.png';
         img.alt = 'microphone';
-        img.style.border = '1px solid blue'; // 디버그: 파란 테두리
-        
         img.onerror = () => {
           console.error('❌ 마이크 이미지 로드 실패:', './micmic.png');
-          console.error('현재 경로:', window.location.href);
         };
         img.onload = () => {
           console.log('✅ 마이크 이미지 로드 성공');
-          console.log('이미지 크기:', img.naturalWidth, 'x', img.naturalHeight);
         };
 
         mic.appendChild(img);
         this.micContainer.appendChild(mic);
         this.microphones.push(mic);
-        
-        console.log('마이크 컨테이너 위치:', {
-          bottom: this.micContainer.style.bottom,
-          left: this.micContainer.style.left,
-          width: this.micContainer.offsetWidth,
-          height: this.micContainer.offsetHeight
-        });
-        console.log('마이크 요소:', mic);
       }
 
       reset() {
@@ -446,58 +471,6 @@
         this.bgLayer.classList.add('hidden');
         this.micContainer.innerHTML = '';
         this.microphones = [];
-      }
-
-      drawPose(landmarks) {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Draw skeleton
-        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
-        this.ctx.lineWidth = 2;
-
-        // Draw key points with labels
-        const keyPoints = [
-          { idx: 11, label: 'L-Shoulder' },
-          { idx: 12, label: 'R-Shoulder' },
-          { idx: 13, label: 'L-Elbow' },
-          { idx: 14, label: 'R-Elbow' },
-          { idx: 15, label: 'L-Wrist' },
-          { idx: 16, label: 'R-Wrist' }
-        ];
-
-        keyPoints.forEach(({ idx, label }) => {
-          const point = landmarks[idx];
-          if (point.visibility > 0.5) {
-            const x = point.x * this.canvas.width;
-            const y = point.y * this.canvas.height;
-
-            this.ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, 8, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            // Draw label
-            this.ctx.fillStyle = 'rgba(0, 255, 0, 1)';
-            this.ctx.font = 'bold 12px Arial';
-            this.ctx.fillText(label, x + 10, y - 5);
-          }
-        });
-
-        // Draw lines connecting shoulders to wrists
-        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-        this.ctx.lineWidth = 2;
-
-        // Left side
-        this.ctx.beginPath();
-        this.ctx.moveTo(landmarks[11].x * this.canvas.width, landmarks[11].y * this.canvas.height);
-        this.ctx.lineTo(landmarks[15].x * this.canvas.width, landmarks[15].y * this.canvas.height);
-        this.ctx.stroke();
-
-        // Right side
-        this.ctx.beginPath();
-        this.ctx.moveTo(landmarks[12].x * this.canvas.width, landmarks[12].y * this.canvas.height);
-        this.ctx.lineTo(landmarks[16].x * this.canvas.width, landmarks[16].y * this.canvas.height);
-        this.ctx.stroke();
       }
     }
 
