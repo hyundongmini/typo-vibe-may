@@ -138,7 +138,7 @@
     /* Microphone container */
     .microphone-container {
       position: fixed;
-      bottom: -1200px;
+      bottom: 0;
       left: 50%;
       transform: translateX(-50%);
       width: 800px;
@@ -166,11 +166,11 @@
 
     @keyframes micRise {
       0% {
-        transform: translateY(0);
+        transform: translateY(200px) scale(0.5);
         opacity: 0;
       }
       100% {
-        transform: translateY(1200px);
+        transform: translateY(0) scale(1);
         opacity: 1;
       }
     }
