@@ -1,0 +1,69 @@
+<svg width="300" height="200" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="umbrellaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8fc8ff;stop-opacity:0.9" />
+      <stop offset="50%" style="stop-color:#6bb6ff;stop-opacity:0.85" />
+      <stop offset="100%" style="stop-color:#4a8fd1;stop-opacity:0.7" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="dropShadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="0" dy="2" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Umbrella canopy (front view, curved dome shape) -->
+  <g filter="url(#dropShadow)">
+    <!-- Main canopy shape -->
+    <path d="M 30 80 Q 30 30, 80 20 Q 130 15, 150 15 Q 170 15, 220 20 Q 270 30, 270 80 L 260 85 Q 260 40, 220 32 Q 180 25, 150 25 Q 120 25, 80 32 Q 40 40, 40 85 Z" 
+          fill="url(#umbrellaGradient)" 
+          filter="url(#glow)"
+          opacity="0.95"/>
+    
+    <!-- Panel divisions (8 segments) -->
+    <line x1="150" y1="15" x2="150" y2="85" stroke="#5aa3e8" stroke-width="2" opacity="0.4"/>
+    <line x1="80" y1="20" x2="70" y2="85" stroke="#5aa3e8" stroke-width="1.5" opacity="0.3"/>
+    <line x1="110" y1="18" x2="105" y2="85" stroke="#5aa3e8" stroke-width="1.5" opacity="0.3"/>
+    <line x1="190" y1="18" x2="195" y2="85" stroke="#5aa3e8" stroke-width="1.5" opacity="0.3"/>
+    <line x1="220" y1="20" x2="230" y2="85" stroke="#5aa3e8" stroke-width="1.5" opacity="0.3"/>
+    
+    <!-- Umbrella handle -->
+    <path d="M 150 85 L 150 160 Q 150 175, 140 180 Q 135 182, 135 177" 
+          stroke="#5aa3e8" 
+          stroke-width="3" 
+          fill="none" 
+          opacity="0.8"
+          stroke-linecap="round"/>
+    
+    <!-- Handle grip -->
+    <ellipse cx="137" cy="178" rx="8" ry="5" fill="#6bb6ff" opacity="0.7"/>
+    
+    <!-- Edge highlight -->
+    <path d="M 40 85 Q 40 40, 80 32 Q 120 25, 150 25 Q 180 25, 220 32 Q 260 40, 260 85" 
+          stroke="#aad8ff" 
+          stroke-width="2" 
+          fill="none" 
+          opacity="0.5"/>
+  </g>
+  
+  <!-- Water droplets on umbrella surface -->
+  <circle cx="90" cy="50" r="2" fill="#aad8ff" opacity="0.8"/>
+  <circle cx="130" cy="45" r="2.5" fill="#aad8ff" opacity="0.7"/>
+  <circle cx="170" cy="45" r="2" fill="#aad8ff" opacity="0.8"/>
+  <circle cx="210" cy="50" r="2.5" fill="#aad8ff" opacity="0.7"/>
+  <circle cx="110" cy="60" r="1.5" fill="#aad8ff" opacity="0.6"/>
+  <circle cx="190" cy="60" r="1.5" fill="#aad8ff" opacity="0.6"/>
+</svg>

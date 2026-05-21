@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rain Animation - Minimal Style</title>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      background: #5DADE2;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    #canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: none;
+    }
+    #umbrella {
+      position: fixed;
+      width: 300px;
+      height: auto;
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0.9;
+      transform: translate(-50%, -20%);
+    }
+    #info {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      color: rgba(255,255,255,0.7);
+      font-size: 14px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #text {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 96px;
+      font-weight: 900;
+      text-align: center;
+      line-height: 1.4;
+      pointer-events: none;
+      z-index: 5;
+      white-space: pre-line;
+      filter: blur(8px);
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">우산을 움직여 빗방울을 연주하세요</div>
+  <div id="text">장마 기간을
+우기로 봐야하나</div>
+  <img id="umbrella" src="우산.png" alt="umbrella">
+  <canvas id="canvas"></canvas>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    
+    // Mouse position for umbrella
+    let mouseX = width / 2;
+    let mouseY = height / 2;
+    const umbrellaRadius = 220; // Collision radius (increased for bigger umbrella)
+    const umbrellaEl = document.getElementById('umbrella');
+    
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      umbrellaEl.style.left = mouseX + 'px';
+      umbrellaEl.style.top = mouseY + 'px';
+    });
+
+    // ============================================
+    // AUDIO ENGINE (with layered rain sounds)
+    // ============================================
+    class AudioEngine {
+      constructor() {
+        this.started = false;
+        this.pentatonic = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25];
+        this.hitCount = 0;
+        this.lastHitTime = Date.now();
+        
+        this.synth = new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: 'sine' },
+          envelope: {
+            attack: 0.02,
+            decay: 0.2,
+            sustain: 0.1,
+            release: 0.8
+          }
+        }).toDestination();
+        
+        this.reverb = new Tone.Reverb({
+          decay: 3,
+          wet: 0.4
+        }).toDestination();
+        this.synth.connect(this.reverb);
+        this.synth.volume.value = -8;
+        
+        // Rain ambient layers
+        this.rainNoise1 = new Tone.Noise('pink').toDestination();
+        this.rainNoise1.volume.value = -30;
+        
+        this.rainNoise2 = new Tone.Noise('brown').toDestination();
+        this.rainNoise2.volume.value = -35;
+        
+        this.rainFilter = new Tone.Filter(2000, 'lowpass').toDestination();
+        this.rainNoise1.connect(this.rainFilter);
+        this.rainNoise2.connect(this.rainFilter);
+      }
+      
+      async start() {
+        if (!this.started) {
+          await Tone.start();
+          this.started = true;
+          this.rainNoise1.start();
+          this.rainNoise2.start();
+          console.log('Audio started with rain ambience');
+        }
+      }
+      
+      updateRainIntensity(hitRate) {
+        if (!this.started) return;
+        
+        // hitRate: 0 (quiet) to 1 (heavy rain)
+        const volume1 = -30 + (hitRate * 15); // -30 to -15
+        const volume2 = -35 + (hitRate * 15); // -35 to -20
+        
+        this.rainNoise1.volume.rampTo(volume1, 0.5);
+        this.rainNoise2.volume.rampTo(volume2, 0.5);
+      }
+      
+      playNote(x, isUmbrella = false) {
+        if (!this.started) {
+          console.log('Audio not started yet');
+          return;
+        }
+        
+        // Track hit rate for rain intensity
+        this.hitCount++;
+        const now = Date.now();
+        const timeSinceLastHit = now - this.lastHitTime;
+        this.lastHitTime = now;
+        
+        // Calculate hit rate (hits per second)
+        const hitRate = Math.min(1, 1000 / Math.max(timeSinceLastHit, 100) / 10);
+        this.updateRainIntensity(hitRate);
+        
+        const index = Math.floor((x / width) * this.pentatonic.length);
+        const freq = this.pentatonic[Math.max(0, Math.min(index, this.pentatonic.length - 1))];
+        
+        // Different volume for umbrella vs ground
+        this.synth.volume.value = isUmbrella ? -6 : -10;
+        this.synth.triggerAttackRelease(freq, '16n');
+      }
+    }
+
+    const audioEngine = new AudioEngine();
+
+    // ============================================
+    // RAINDROP CLASS (with umbrella zone detection)
+    // ============================================
+    class Raindrop {
+      constructor(x, y, length, speed) {
+        this.x = x;
+        this.y = y;
+        this.length = length;
+        this.baseSpeed = speed;
+        this.speed = speed;
+        this.hasHitGround = false;
+        this.hasHitUmbrella = false;
+        this.inUmbrellaZone = false;
+      }
+      
+      update() {
+        // Check if in umbrella zone (slower rain)
+        const dx = this.x - mouseX;
+        const dy = this.y - mouseY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < umbrellaRadius * 1.5 && mouseY < height - 100) {
+          this.inUmbrellaZone = true;
+          this.speed = this.baseSpeed * 0.4; // 60% slower
+        } else {
+          this.inUmbrellaZone = false;
+          this.speed = this.baseSpeed;
+        }
+        
+        this.y += this.speed;
+        
+        // Check umbrella collision
+        if (!this.hasHitUmbrella && !this.hasHitGround) {
+          if (distance < umbrellaRadius && mouseY < height - 100) {
+            this.hasHitUmbrella = true;
+            // Create small splash droplets
+            for (let i = 0; i < 3; i++) {
+              const angle = Math.random() * Math.PI - Math.PI / 2;
+              const speed = 2 + Math.random() * 2;
+              splashDroplets.push(new SplashDroplet(
+                this.x,
+                this.y,
+                Math.cos(angle) * speed,
+                Math.sin(angle) * speed
+              ));
+            }
+            audioEngine.playNote(this.x, true); // true = umbrella hit
+            return false; // Remove raindrop
+          }
+        }
+        
+        // Check if hit ground
+        if (!this.hasHitGround && this.y >= height - 50) {
+          this.hasHitGround = true;
+          ripples.push(new Ripple(this.x, height - 50));
+          audioEngine.playNote(this.x, false); // false = ground hit
+        }
+        
+        return this.y < height + this.length;
+      }
+      
+      draw() {
+        // Dimmer in umbrella zone
+        const opacity = this.inUmbrellaZone ? 0.4 : 0.8;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x, this.y + this.length);
+        ctx.stroke();
+      }
+    }
+
+    // ============================================
+    // SPLASH DROPLET CLASS (토독토독 터지는 작은 방울)
+    // ============================================
+    class SplashDroplet {
+      constructor(x, y, vx, vy) {
+        this.x = x;
+        this.y = y;
+        this.vx = vx;
+        this.vy = vy;
+        this.life = 1.0;
+        this.gravity = 0.3;
+      }
+      
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += this.gravity;
+        this.life -= 0.03;
+        
+        return this.life > 0 && this.y < height;
+      }
+      
+      draw() {
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.life * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // ============================================
+    // RIPPLE CLASS (Concentric circles)
+    // ============================================
+    class Ripple {
+      constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.rings = [
+          { radius: 0, maxRadius: 40, speed: 1.2, opacity: 1 },
+          { radius: 0, maxRadius: 60, speed: 1.0, opacity: 1, delay: 100 },
+          { radius: 0, maxRadius: 80, speed: 0.8, opacity: 1, delay: 200 }
+        ];
+        this.startTime = Date.now();
+      }
+      
+      update() {
+        const elapsed = Date.now() - this.startTime;
+        let allDone = true;
+        
+        this.rings.forEach(ring => {
+          const delay = ring.delay || 0;
+          if (elapsed > delay) {
+            ring.radius += ring.speed;
+            ring.opacity = Math.max(0, 1 - (ring.radius / ring.maxRadius));
+            if (ring.radius < ring.maxRadius) {
+              allDone = false;
+            }
+          } else {
+            allDone = false;
+          }
+        });
+        
+        return !allDone;
+      }
+      
+      draw() {
+        this.rings.forEach(ring => {
+          if (ring.radius > 0 && ring.opacity > 0) {
+            ctx.strokeStyle = `rgba(255, 255, 255, ${ring.opacity * 0.6})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.ellipse(this.x, this.y, ring.radius, ring.radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        });
+      }
+    }
+
+    // ============================================
+    // RAIN SYSTEM
+    // ============================================
+    let raindrops = [];
+    let ripples = [];
+    let splashDroplets = [];
+    
+    function createRaindrop() {
+      const x = Math.random() * width;
+      const y = -Math.random() * height * 0.5;
+      const length = 20 + Math.random() * 40;
+      const speed = 4 + Math.random() * 4;
+      raindrops.push(new Raindrop(x, y, length, speed));
+    }
+    
+    // Initial raindrops
+    for (let i = 0; i < 150; i++) {
+      createRaindrop();
+    }
+    
+    // Continuous rain (더 많이, 더 자주)
+    setInterval(() => {
+      if (raindrops.length < 250) {
+        for (let i = 0; i < 3; i++) {
+          createRaindrop();
+        }
+      }
+    }, 100);
+
+    // ============================================
+    // INTERACTION
+    // ============================================
+    canvas.addEventListener('click', async (e) => {
+      await audioEngine.start();
+    });
+
+    // ============================================
+    // ANIMATION LOOP
+    // ============================================
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Clear with background color
+      ctx.fillStyle = '#5DADE2';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Update and draw raindrops
+      raindrops = raindrops.filter(drop => {
+        const alive = drop.update();
+        if (alive) drop.draw();
+        return alive;
+      });
+      
+      // Update and draw splash droplets
+      splashDroplets = splashDroplets.filter(droplet => {
+        const alive = droplet.update();
+        if (alive) droplet.draw();
+        return alive;
+      });
+      
+      // Update and draw ripples
+      ripples = ripples.filter(ripple => {
+        const alive = ripple.update();
+        if (alive) ripple.draw();
+        return alive;
+      });
+    }
+
+    animate();
+  </script>
+</body>
+</html>
