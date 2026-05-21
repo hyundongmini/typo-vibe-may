@@ -28,15 +28,14 @@
       justify-content: center;
     }
 
-    /* Video background layer */
+    /* Video background layer - 숨김 (canvas가 대신함) */
     #video {
       position: absolute;
       width: 100%;
       height: 100%;
       object-fit: cover;
       transform: scaleX(-1); /* Mirror effect */
-      filter: contrast(1.1) brightness(0.95);
-      z-index: 3;
+      display: none; /* Canvas가 대신 렌더링 */
     }
 
     /* Canvas overlay for effects */
@@ -47,7 +46,7 @@
       width: 100%;
       height: 100%;
       z-index: 3;
-      mix-blend-mode: multiply; /* 세그멘테이션 마스크 적용 */
+      transform: scaleX(-1); /* Mirror effect */
     }
 
     /* Speech bubble */
@@ -232,7 +231,7 @@
     <div class="speech-bubble" id="speechBubble" style="display: none;">질문있습니다!</div>
 
     <!-- Microphone container -->
-    <div class="microphone-container" id="micContainer" style="border: 2px solid yellow; background: rgba(255, 255, 0, 0.1);"></div>
+    <div class="microphone-container" id="micContainer"></div>
 
     <!-- Grain effect -->
     <div id="grain"></div>
@@ -352,29 +351,30 @@
       onSegmentationResults(results) {
         if (!results.segmentationMask) return;
 
-        // Draw segmentation mask to canvas
+        // Clear canvas
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw video frame to canvas
+        this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+
+        // Get segmentation mask
         const mask = results.segmentationMask;
-        const imageData = this.ctx.createImageData(this.canvas.width, this.canvas.height);
+        const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
         const data = imageData.data;
 
-        // Get mask data
+        // Apply mask to alpha channel
         const maskData = new Uint8ClampedArray(mask.data);
-
-        // Create alpha channel based on mask
+        
         for (let i = 0; i < maskData.length; i++) {
           const maskValue = maskData[i];
           const pixelIndex = i * 4;
 
-          if (maskValue > 0.5) {
-            // Person detected - keep alpha opaque
-            data[pixelIndex + 3] = 255;
-          } else {
-            // Background - make transparent
-            data[pixelIndex + 3] = 0;
+          // If not person (maskValue < 128), make transparent
+          if (maskValue < 128) {
+            data[pixelIndex + 3] = 0; // Set alpha to 0
           }
         }
 
-        // Apply to canvas as mask
         this.ctx.putImageData(imageData, 0, 0);
       }
 
