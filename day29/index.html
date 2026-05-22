@@ -50,14 +50,26 @@
         sum += radius / (d * d + 0.0001);
       }
       
-      // Add noise for trembling effect
-      float n = noise(uv * 100.0 + u_time * 0.5) * 0.1;
+      // Add noise for organic feel
+      float n = noise(uv * 200.0 + u_time * 0.3) * 0.15;
       sum += n;
       
-      // Threshold-based outline
       vec3 color = vec3(0.0);
-      if (sum > 1.0 && sum < 1.2) {
-        color = vec3(1.0);
+      
+      // Outer thick outline (dashed)
+      if (sum > 0.9 && sum < 1.15) {
+        float dashPattern = sin(uv.x * 100.0 + uv.y * 100.0 + u_time) * 0.5 + 0.5;
+        if (dashPattern > 0.3) {
+          color = vec3(1.0);
+        }
+      }
+      
+      // Inner thin outline (dashed)
+      if (sum > 1.3 && sum < 1.4) {
+        float dashPattern = sin(uv.x * 150.0 + uv.y * 150.0 + u_time * 1.5) * 0.5 + 0.5;
+        if (dashPattern > 0.4) {
+          color = vec3(1.0);
+        }
       }
       
       gl_FragColor = vec4(color, 1.0);
@@ -68,7 +80,7 @@
     let blobs = [];
     let anchorPoints = [];
     let metaballShader;
-    let textToRender = "오늘의\n거";
+    let textToRender = "ale\nci.ro\nev.o.ka";
     
     function preload() {
       // Shader will be created in setup
@@ -97,8 +109,8 @@
       // Create blobs
       createBlobs();
       
-      // Add floating particles
-      for (let i = 0; i < 20; i++) {
+      // Add floating particles (more for microorganism feel)
+      for (let i = 0; i < 50; i++) {
         blobs.push({
           x: random(width),
           y: random(height),
@@ -106,7 +118,7 @@
           anchorY: random(height),
           vx: random(-1, 1),
           vy: random(-1, 1),
-          radius: random(0.01, 0.02),
+          radius: random(0.005, 0.015),
           noiseOffsetX: random(1000),
           noiseOffsetY: random(1000),
           isFree: true
@@ -120,13 +132,13 @@
       tempCanvas.background(0);
       tempCanvas.fill(255);
       tempCanvas.textAlign(CENTER, CENTER);
-      tempCanvas.textSize(150);
-      tempCanvas.textFont('Pretendard');
+      tempCanvas.textSize(120);
+      tempCanvas.textFont('Courier New');
       tempCanvas.textStyle(BOLD);
       
       // Draw text
       let lines = textToRender.split('\n');
-      let lineHeight = 180;
+      let lineHeight = 140;
       let startY = height / 2 - (lines.length - 1) * lineHeight / 2;
       
       lines.forEach((line, i) => {
@@ -135,7 +147,7 @@
       
       // Sample points from text
       tempCanvas.loadPixels();
-      let sampleRate = 6;
+      let sampleRate = 5;
       
       for (let y = 0; y < height; y += sampleRate) {
         for (let x = 0; x < width; x += sampleRate) {
@@ -144,10 +156,10 @@
           
           if (brightness > 128) {
             // Add some randomness
-            if (random() < 0.4) {
+            if (random() < 0.5) {
               anchorPoints.push({
-                x: x + random(-2, 2),
-                y: y + random(-2, 2)
+                x: x + random(-3, 3),
+                y: y + random(-3, 3)
               });
             }
           }
