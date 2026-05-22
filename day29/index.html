@@ -120,13 +120,13 @@
       tempCanvas.background(0);
       tempCanvas.fill(255);
       tempCanvas.textAlign(CENTER, CENTER);
-      tempCanvas.textSize(200);
+      tempCanvas.textSize(150);
       tempCanvas.textFont('Pretendard');
       tempCanvas.textStyle(BOLD);
       
       // Draw text
       let lines = textToRender.split('\n');
-      let lineHeight = 220;
+      let lineHeight = 180;
       let startY = height / 2 - (lines.length - 1) * lineHeight / 2;
       
       lines.forEach((line, i) => {
@@ -135,7 +135,7 @@
       
       // Sample points from text
       tempCanvas.loadPixels();
-      let sampleRate = 8;
+      let sampleRate = 6;
       
       for (let y = 0; y < height; y += sampleRate) {
         for (let x = 0; x < width; x += sampleRate) {
@@ -144,7 +144,7 @@
           
           if (brightness > 128) {
             // Add some randomness
-            if (random() < 0.3) {
+            if (random() < 0.4) {
               anchorPoints.push({
                 x: x + random(-2, 2),
                 y: y + random(-2, 2)
