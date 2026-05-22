@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Image Test</title>
+  <style>
+    body { margin: 20px; font-family: Arial; }
+    .test { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+    img { max-width: 300px; border: 2px solid red; }
+  </style>
+</head>
+<body>
+  <h1>마이크 이미지 테스트</h1>
+  
+  <div class="test">
+    <h2>1. 직접 img 태그</h2>
+    <img src="./micmic.png" alt="test1" />
+  </div>
+
+  <div class="test">
+    <h2>2. 절대 경로</h2>
+    <img src="/Users/mi.ni/260512_바이브코딩_5월/day28/micmic.png" alt="test2" />
+  </div>
+
+  <div class="test">
+    <h2>3. JavaScript로 생성</h2>
+    <div id="container"></div>
+  </div>
+
+  <script>
+    const img = document.createElement('img');
+    img.src = './micmic.png';
+    img.style.border = '2px solid blue';
+    img.onload = () => console.log('✅ 로드 성공');
+    img.onerror = () => console.error('❌ 로드 실패');
+    document.getElementById('container').appendChild(img);
+  </script>
+</body>
+</html>
