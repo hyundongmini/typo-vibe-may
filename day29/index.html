@@ -1,248 +1,302 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Metaball Typography</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      overflow: hidden;
-      background: #000;
-      font-family: 'Arial Black', sans-serif;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Metaball Typography Poster</title>
+<style>
+html, body {
+  margin: 0; 
+  padding: 0;
+  background: #000;
+  overflow: hidden;
+  height: 100%;
+  font-family: -apple-system, sans-serif;
+}
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+.hint {
+  position: fixed;
+  top: 16px; 
+  left: 20px;
+  color: rgba(255,255,255,0.4);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  z-index: 10;
+}
+.word {
+  position: fixed;
+  bottom: 16px; 
+  right: 20px;
+  color: rgba(255,255,255,0.35);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  z-index: 10;
+}
+</style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
+<div class="hint">MOVE MOUSE · CLICK TO CHANGE WORD</div>
+<div class="word" id="word-label">YALE</div>
+<canvas id="c"></canvas>
 
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    
-    let width, height;
-    let blobs = [];
-    let anchorPoints = [];
-    let currentWord = 'YALE';
-    const words = ['YALE', 'BLOB', 'FLOW', 'MELT'];
-    let wordIndex = 0;
-    
-    // Grid settings
-    const gridSize = 3;
-    let gridWidth, gridHeight;
-    
-    // Mouse
-    let mouseX = -1000;
-    let mouseY = -1000;
-    
-    function init() {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-      
-      gridWidth = Math.ceil(width / gridSize);
-      gridHeight = Math.ceil(height / gridSize);
-      
-      extractAnchorPoints(currentWord);
-      createBlobs();
-    }
-    
-    function extractAnchorPoints(text) {
-      anchorPoints = [];
-      
-      // Temporary canvas
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = width;
-      tempCanvas.height = height;
-      const tempCtx = tempCanvas.getContext('2d');
-      
-      // Draw text
-      tempCtx.fillStyle = '#fff';
-      tempCtx.font = 'bold 200px Arial Black';
-      tempCtx.textAlign = 'center';
-      tempCtx.textBaseline = 'middle';
-      tempCtx.fillText(text, width / 2, height / 2);
-      
-      // Sample pixels
-      const imageData = tempCtx.getImageData(0, 0, width, height);
-      const data = imageData.data;
-      
-      for (let y = 0; y < height; y += 8) {
-        for (let x = 0; x < width; x += 8) {
-          const index = (x + y * width) * 4;
-          const alpha = data[index + 3];
-          
-          if (alpha > 128) {
-            anchorPoints.push({ x, y });
-          }
-        }
-      }
-      
-      console.log('Anchor points:', anchorPoints.length);
-    }
-    
-    function createBlobs() {
-      blobs = [];
-      
-      anchorPoints.forEach(anchor => {
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * 60;
-        
-        blobs.push({
-          x: anchor.x + Math.cos(angle) * distance,
-          y: anchor.y + Math.sin(angle) * distance,
-          anchorX: anchor.x,
-          anchorY: anchor.y,
-          vx: 0,
-          vy: 0,
-          radius: 10 + Math.random() * 4,
-          phase: Math.random() * Math.PI * 2
+<script>
+(function(){
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const label = document.getElementById('word-label');
+
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+
+window.addEventListener('resize', () => {
+  resize();
+  setupBlobs(words[wordIdx]);
+});
+
+resize();
+
+const words = ['YALE', 'MFA', 'ART', '2019'];
+let wordIdx = 0;
+let blobs = [];
+const mouse = { x: -9999, y: -9999 };
+
+// ===== Step 1: 글자에서 anchor 좌표 추출 =====
+function extractAnchors(text) {
+  const tmp = document.createElement('canvas');
+  tmp.width = W;
+  tmp.height = H;
+  const tctx = tmp.getContext('2d');
+  
+  tctx.fillStyle = '#000';
+  tctx.fillRect(0, 0, W, H);
+  tctx.fillStyle = '#fff';
+  
+  // 폰트 크기: 화면 높이의 35%
+  const fontSize = Math.floor(H * 0.35);
+  tctx.font = 'bold ' + fontSize + 'px sans-serif';
+  tctx.textAlign = 'center';
+  tctx.textBaseline = 'middle';
+  tctx.fillText(text, W / 2, H / 2);
+  
+  const img = tctx.getImageData(0, 0, W, H).data;
+  const anchors = [];
+  const step = 10; // 점 간격
+  
+  for (let y = 0; y < H; y += step) {
+    for (let x = 0; x < W; x += step) {
+      const i = (y * W + x) * 4;
+      // 흰색 픽셀이면 anchor로 채택
+      if (img[i] > 128) {
+        anchors.push({
+          x: x + (Math.random() - 0.5) * 2,
+          y: y + (Math.random() - 0.5) * 2
         });
+      }
+    }
+  }
+  
+  return anchors;
+}
+
+// ===== Step 2: blob 생성 =====
+function setupBlobs(text) {
+  const anchors = extractAnchors(text);
+  blobs = anchors.map(a => ({
+    anchorX: a.x,
+    anchorY: a.y,
+    x: a.x + (Math.random() - 0.5) * 80,
+    y: a.y + (Math.random() - 0.5) * 80,
+    vx: 0, 
+    vy: 0,
+    radius: 9 + Math.random() * 2.5,
+    phase: Math.random() * Math.PI * 2
+  }));
+  
+  label.textContent = text;
+  console.log('blob count:', blobs.length);
+}
+
+setupBlobs(words[0]);
+
+// ===== 이벤트 =====
+window.addEventListener('mousemove', (e) => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+window.addEventListener('mouseleave', () => {
+  mouse.x = -9999; 
+  mouse.y = -9999;
+});
+
+window.addEventListener('click', () => {
+  wordIdx = (wordIdx + 1) % words.length;
+  
+  // anchor만 갱신하면 부드럽게 변형
+  const newAnchors = extractAnchors(words[wordIdx]);
+  
+  // blob 개수 맞추기
+  if (newAnchors.length > blobs.length) {
+    // 부족하면 추가
+    for (let i = blobs.length; i < newAnchors.length; i++) {
+      const a = newAnchors[i];
+      blobs.push({
+        anchorX: a.x, 
+        anchorY: a.y,
+        x: a.x + (Math.random()-0.5)*100,
+        y: a.y + (Math.random()-0.5)*100,
+        vx: 0, 
+        vy: 0,
+        radius: 9 + Math.random() * 2.5,
+        phase: Math.random() * Math.PI * 2
       });
     }
+  } else if (newAnchors.length < blobs.length) {
+    blobs = blobs.slice(0, newAnchors.length);
+  }
+  
+  // 기존 blob의 anchor 갱신
+  for (let i = 0; i < newAnchors.length; i++) {
+    blobs[i].anchorX = newAnchors[i].x;
+    blobs[i].anchorY = newAnchors[i].y;
+  }
+  
+  label.textContent = words[wordIdx];
+});
+
+// ===== Step 3: 매 프레임 업데이트 =====
+let t = 0;
+
+function update() {
+  t += 0.012;
+  
+  for (const b of blobs) {
+    // (a) anchor 복원력
+    b.vx += (b.anchorX - b.x) * 0.025;
+    b.vy += (b.anchorY - b.y) * 0.025;
     
-    function updateBlobs() {
-      const time = Date.now() * 0.001;
-      
-      blobs.forEach(blob => {
-        // Restore force to anchor
-        const dx = blob.anchorX - blob.x;
-        const dy = blob.anchorY - blob.y;
-        blob.vx += dx * 0.025;
-        blob.vy += dy * 0.025;
-        
-        // Floating motion (sin/cos)
-        blob.vx += Math.sin(time + blob.phase) * 0.025;
-        blob.vy += Math.cos(time + blob.phase * 1.3) * 0.025;
-        
-        // Mouse repulsion
-        const mdx = blob.x - mouseX;
-        const mdy = blob.y - mouseY;
-        const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-        
-        if (mdist < 80 && mdist > 0) {
-          const force = (80 - mdist) / 80;
-          blob.vx += (mdx / mdist) * force * 1.5;
-          blob.vy += (mdy / mdist) * force * 1.5;
-        }
-        
-        // Damping
-        blob.vx *= 0.82;
-        blob.vy *= 0.82;
-        
-        // Update position
-        blob.x += blob.vx;
-        blob.y += blob.vy;
-      });
+    // (b) 부유
+    b.vx += Math.cos(t + b.phase) * 0.04;
+    b.vy += Math.sin(t * 1.3 + b.phase) * 0.04;
+    
+    // (c) 마우스 반발
+    const dx = b.x - mouse.x;
+    const dy = b.y - mouse.y;
+    const d2 = dx*dx + dy*dy;
+    
+    if (d2 < 10000) { // 100px 반경
+      const d = Math.sqrt(d2) + 0.01;
+      const force = (1 - d / 100) * 2.5;
+      b.vx += (dx / d) * force;
+      b.vy += (dy / d) * force;
     }
     
-    function renderMetaball() {
-      // Clear
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, width, height);
+    // (d) 감쇠 + 위치 갱신
+    b.vx *= 0.82;
+    b.vy *= 0.82;
+    b.x += b.vx;
+    b.y += b.vy;
+  }
+}
+
+// ===== Step 4: 렌더링 =====
+const GRID = 4;
+let cols, rows, field;
+
+function setupField() {
+  cols = Math.floor(W / GRID);
+  rows = Math.floor(H / GRID);
+  field = new Float32Array(cols * rows);
+}
+
+setupField();
+window.addEventListener('resize', setupField);
+
+function render() {
+  field.fill(0);
+  
+  // 각 blob 주변 그리드 셀에만 영향력 누적
+  for (const b of blobs) {
+    const r2 = b.radius * b.radius;
+    const reach = b.radius * 2.5;
+    
+    const minCx = Math.max(0, Math.floor((b.x - reach) / GRID));
+    const maxCx = Math.min(cols - 1, Math.ceil((b.x + reach) / GRID));
+    const minCy = Math.max(0, Math.floor((b.y - reach) / GRID));
+    const maxCy = Math.min(rows - 1, Math.ceil((b.y + reach) / GRID));
+    
+    for (let cy = minCy; cy <= maxCy; cy++) {
+      for (let cx = minCx; cx <= maxCx; cx++) {
+        const px = cx * GRID;
+        const py = cy * GRID;
+        const ddx = px - b.x;
+        const ddy = py - b.y;
+        const d2 = ddx*ddx + ddy*ddy + 1;
+        
+        field[cy * cols + cx] += r2 / d2;
+      }
+    }
+  }
+  
+  // 픽셀에 출력
+  const imgData = ctx.createImageData(W, H);
+  const data = imgData.data;
+  
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < cols; cx++) {
+      const v = field[cy * cols + cx];
       
-      // Calculate grid
-      const grid = new Array(gridWidth * gridHeight).fill(0);
+      // 약간의 떨림 노이즈 추가
+      const noise = (Math.sin(cx * 0.3 + t * 1.8) + Math.cos(cy * 0.35 + t * 1.4)) * 0.05;
       
-      for (let gy = 0; gy < gridHeight; gy++) {
-        for (let gx = 0; gx < gridWidth; gx++) {
-          const px = gx * gridSize;
-          const py = gy * gridSize;
-          
-          let sum = 0;
-          
-          // Calculate influence from all blobs
-          for (let i = 0; i < blobs.length; i++) {
-            const blob = blobs[i];
-            const dx = px - blob.x;
-            const dy = py - blob.y;
-            const distSq = dx * dx + dy * dy + 1;
-            const radiusSq = blob.radius * blob.radius;
+      if (v + noise > 1.0) {
+        for (let dy = 0; dy < GRID; dy++) {
+          for (let dx = 0; dx < GRID; dx++) {
+            const px = cx * GRID + dx;
+            const py = cy * GRID + dy;
             
-            sum += radiusSq / distSq;
-          }
-          
-          grid[gx + gy * gridWidth] = sum;
-        }
-      }
-      
-      // Draw filled cells
-      ctx.fillStyle = '#fff';
-      for (let gy = 0; gy < gridHeight; gy++) {
-        for (let gx = 0; gx < gridWidth; gx++) {
-          const sum = grid[gx + gy * gridWidth];
-          
-          if (sum > 1.0) {
-            ctx.fillRect(gx * gridSize, gy * gridSize, gridSize, gridSize);
+            if (px < W && py < H) {
+              const i = (py * W + px) * 4;
+              data[i] = 255; 
+              data[i+1] = 255; 
+              data[i+2] = 255; 
+              data[i+3] = 255;
+            }
           }
         }
       }
     }
-    
-    function animate() {
-      updateBlobs();
-      renderMetaball();
-      requestAnimationFrame(animate);
-    }
-    
-    // Events
-    canvas.addEventListener('mousemove', (e) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-    });
-    
-    canvas.addEventListener('mouseleave', () => {
-      mouseX = -1000;
-      mouseY = -1000;
-    });
-    
-    canvas.addEventListener('click', () => {
-      wordIndex = (wordIndex + 1) % words.length;
-      currentWord = words[wordIndex];
-      extractAnchorPoints(currentWord);
-      
-      // Reassign anchors to existing blobs
-      if (blobs.length > anchorPoints.length) {
-        blobs = blobs.slice(0, anchorPoints.length);
-      } else if (blobs.length < anchorPoints.length) {
-        const diff = anchorPoints.length - blobs.length;
-        for (let i = 0; i < diff; i++) {
-          const anchor = anchorPoints[blobs.length + i];
-          blobs.push({
-            x: anchor.x,
-            y: anchor.y,
-            anchorX: anchor.x,
-            anchorY: anchor.y,
-            vx: 0,
-            vy: 0,
-            radius: 10 + Math.random() * 4,
-            phase: Math.random() * Math.PI * 2
-          });
-        }
-      }
-      
-      // Update anchors
-      blobs.forEach((blob, i) => {
-        if (i < anchorPoints.length) {
-          blob.anchorX = anchorPoints[i].x;
-          blob.anchorY = anchorPoints[i].y;
-        }
-      });
-    });
-    
-    window.addEventListener('resize', () => {
-      init();
-    });
-    
-    // Start
-    init();
-    animate();
-  </script>
+  }
+  
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+  ctx.putImageData(imgData, 0, 0);
+  
+  // 주변 작은 입자 (분위기용)
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  for (let i = 0; i < 40; i++) {
+    const px = (Math.sin(t * 0.4 + i * 1.7) * 0.5 + 0.5) * W;
+    const py = (Math.cos(t * 0.25 + i * 2.3) * 0.5 + 0.5) * H;
+    ctx.fillRect(px, py, 1.5, 1.5);
+  }
+}
+
+function loop() {
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+loop();
+})();
+</script>
 </body>
 </html>
