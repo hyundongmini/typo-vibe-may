@@ -71,24 +71,25 @@
     let textToRender = "오늘의\n거";
     
     function preload() {
+      // Shader will be created in setup
+    }
+    
+    function setup() {
+      createCanvas(windowWidth, windowHeight, WEBGL);
+      
       // Create shader
-      metaballShader = createShader(
-        // Vertex shader (default)
-        `
+      let vertShader = `
         attribute vec3 aPosition;
         void main() {
           vec4 positionVec4 = vec4(aPosition, 1.0);
           positionVec4.xy = positionVec4.xy * 2.0 - 1.0;
           gl_Position = positionVec4;
         }
-        `,
-        // Fragment shader
-        document.getElementById('metaball-frag').textContent
-      );
-    }
-    
-    function setup() {
-      createCanvas(windowWidth, windowHeight, WEBGL);
+      `;
+      
+      let fragShader = document.getElementById('metaball-frag').textContent;
+      
+      metaballShader = createShader(vertShader, fragShader);
       
       // Extract anchor points from text
       extractAnchorPoints();
