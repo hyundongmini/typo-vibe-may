@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metaball Typography</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script id="metaball-frag" type="x-shader/x-fragment">
+    precision highp float;
+    
+    uniform vec2 u_resolution;
+    uniform float u_time;
+    uniform vec3 u_blobs[200];
+    uniform int u_blobCount;
+    
+    // Noise function
+    float noise(vec2 st) {
+      return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+    }
+    
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_resolution;
+      
+      float sum = 0.0;
+      
+      // Calculate metaball influence
+      for (int i = 0; i < 200; i++) {
+        if (i >= u_blobCount) break;
+        
+        vec2 blobPos = u_blobs[i].xy;
+        float radius = u_blobs[i].z;
+        
+        float d = distance(uv, blobPos);
+        sum += radius / (d * d + 0.0001);
+      }
+      
+      // Add noise for trembling effect
+      float n = noise(uv * 100.0 + u_time * 0.5) * 0.1;
+      sum += n;
+      
+      // Threshold-based outline
+      vec3 color = vec3(0.0);
+      if (sum > 1.0 && sum < 1.2) {
+        color = vec3(1.0);
+      }
+      
+      gl_FragColor = vec4(color, 1.0);
+    }
+  </script>
+
+  <script>
+    let blobs = [];
+    let anchorPoints = [];
+    let metaballShader;
+    let textToRender = "오늘의\n거";
+    
+    function preload() {
+      // Create shader
+      metaballShader = createShader(
+        // Vertex shader (default)
+        `
+        attribute vec3 aPosition;
+        void main() {
+          vec4 positionVec4 = vec4(aPosition, 1.0);
+          positionVec4.xy = positionVec4.xy * 2.0 - 1.0;
+          gl_Position = positionVec4;
+        }
+        `,
+        // Fragment shader
+        document.getElementById('metaball-frag').textContent
+      );
+    }
+    
+    function setup() {
+      createCanvas(windowWidth, windowHeight, WEBGL);
+      
+      // Extract anchor points from text
+      extractAnchorPoints();
+      
+      // Create blobs
+      createBlobs();
+      
+      // Add floating particles
+      for (let i = 0; i < 20; i++) {
+        blobs.push({
+          x: random(width),
+          y: random(height),
+          anchorX: random(width),
+          anchorY: random(height),
+          vx: random(-1, 1),
+          vy: random(-1, 1),
+          radius: random(0.01, 0.02),
+          noiseOffsetX: random(1000),
+          noiseOffsetY: random(1000),
+          isFree: true
+        });
+      }
+    }
+    
+    function extractAnchorPoints() {
+      // Create temporary canvas
+      let tempCanvas = createGraphics(width, height);
+      tempCanvas.background(0);
+      tempCanvas.fill(255);
+      tempCanvas.textAlign(CENTER, CENTER);
+      tempCanvas.textSize(200);
+      tempCanvas.textFont('Pretendard');
+      tempCanvas.textStyle(BOLD);
+      
+      // Draw text
+      let lines = textToRender.split('\n');
+      let lineHeight = 220;
+      let startY = height / 2 - (lines.length - 1) * lineHeight / 2;
+      
+      lines.forEach((line, i) => {
+        tempCanvas.text(line, width / 2, startY + i * lineHeight);
+      });
+      
+      // Sample points from text
+      tempCanvas.loadPixels();
+      let sampleRate = 8;
+      
+      for (let y = 0; y < height; y += sampleRate) {
+        for (let x = 0; x < width; x += sampleRate) {
+          let index = (x + y * width) * 4;
+          let brightness = tempCanvas.pixels[index];
+          
+          if (brightness > 128) {
+            // Add some randomness
+            if (random() < 0.3) {
+              anchorPoints.push({
+                x: x + random(-2, 2),
+                y: y + random(-2, 2)
+              });
+            }
+          }
+        }
+      }
+      
+      console.log('Anchor points:', anchorPoints.length);
+    }
+    
+    function createBlobs() {
+      anchorPoints.forEach(anchor => {
+        blobs.push({
+          x: anchor.x + random(-100, 100),
+          y: anchor.y + random(-100, 100),
+          anchorX: anchor.x,
+          anchorY: anchor.y,
+          vx: 0,
+          vy: 0,
+          radius: random(0.008, 0.015),
+          noiseOffsetX: random(1000),
+          noiseOffsetY: random(1000),
+          isFree: false
+        });
+      });
+    }
+    
+    function draw() {
+      background(0);
+      
+      // Update blobs
+      updateBlobs();
+      
+      // Render with shader
+      shader(metaballShader);
+      
+      // Pass uniforms
+      metaballShader.setUniform('u_resolution', [width, height]);
+      metaballShader.setUniform('u_time', millis() / 1000.0);
+      metaballShader.setUniform('u_blobCount', blobs.length);
+      
+      // Pass blob data
+      let blobData = [];
+      blobs.forEach(blob => {
+        blobData.push(blob.x / width, blob.y / height, blob.radius);
+      });
+      metaballShader.setUniform('u_blobs', blobData);
+      
+      // Draw fullscreen quad
+      rect(-width/2, -height/2, width, height);
+    }
+    
+    function updateBlobs() {
+      let mousePos = { x: mouseX, y: mouseY };
+      
+      blobs.forEach(blob => {
+        // Perlin noise drift
+        let noiseX = noise(blob.noiseOffsetX + frameCount * 0.01);
+        let noiseY = noise(blob.noiseOffsetY + frameCount * 0.01);
+        
+        let driftX = (noiseX - 0.5) * 0.5;
+        let driftY = (noiseY - 0.5) * 0.5;
+        
+        // Mouse repulsion
+        let dx = blob.x - mousePos.x;
+        let dy = blob.y - mousePos.y;
+        let dist = sqrt(dx * dx + dy * dy);
+        
+        if (dist < 150 && dist > 0) {
+          let force = (150 - dist) / 150;
+          blob.vx += (dx / dist) * force * 2;
+          blob.vy += (dy / dist) * force * 2;
+        }
+        
+        // Restore force to anchor
+        if (!blob.isFree) {
+          let restoreX = (blob.anchorX - blob.x) * 0.02;
+          let restoreY = (blob.anchorY - blob.y) * 0.02;
+          
+          blob.vx += restoreX + driftX;
+          blob.vy += restoreY + driftY;
+        } else {
+          blob.vx += driftX;
+          blob.vy += driftY;
+        }
+        
+        // Damping
+        blob.vx *= 0.95;
+        blob.vy *= 0.95;
+        
+        // Update position
+        blob.x += blob.vx;
+        blob.y += blob.vy;
+        
+        // Boundary
+        if (blob.isFree) {
+          if (blob.x < 0 || blob.x > width) blob.vx *= -1;
+          if (blob.y < 0 || blob.y > height) blob.vy *= -1;
+          blob.x = constrain(blob.x, 0, width);
+          blob.y = constrain(blob.y, 0, height);
+        }
+      });
+    }
+    
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+      
+      // Recreate
+      blobs = [];
+      anchorPoints = [];
+      extractAnchorPoints();
+      createBlobs();
+    }
+  </script>
+</body>
+</html>
